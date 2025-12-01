@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import useVehicle from "../../context/VehicleContext";
+import useVehicle from "../context/VehicleContext";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function Navbar() {

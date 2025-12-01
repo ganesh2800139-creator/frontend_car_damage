@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import useVehicle from "../../context/VehicleContext";
+import useVehicle from "../context/VehicleContext.jsx";
 import { auth, db } from "../../firebase.js";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
