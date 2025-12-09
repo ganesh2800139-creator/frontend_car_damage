@@ -26,8 +26,10 @@ app = Flask(__name__)
 # CORS configuration
 CORS(
     app,
-    origins=["*"],
-    supports_credentials=True
+    origins=["http://localhost:5173", "https://vehicle-damage-dl-frontend.onrender.com", "*"],
+    supports_credentials=True,
+    allow_headers=["Content-Type", "Authorization"],
+    methods=["GET", "POST", "OPTIONS"]
 )
 
 # Optimized configuration for Render free tier
