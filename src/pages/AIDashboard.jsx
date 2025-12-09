@@ -28,13 +28,55 @@ export default function AIDashboard() {
   const [showLoginAlert, setShowLoginAlert] = useState(false);
 
   // API Configuration
-  const API_BASE_URL = "http://192.168.1.7:5000";
+  const API_BASE_URL = "http://127.0.0.1:5000";
   const ENDPOINTS = {
     VEHICLE_BRANDS: `${API_BASE_URL}/vehicle-brands`,
     PREDICT: `${API_BASE_URL}/predict`,
     HEALTH: `${API_BASE_URL}/health`,
     STATIC: `${API_BASE_URL}/static`
   };
+  // 🎨 AUTO COLOR DETECTION HELPERS
+const extractAverageColor = (imageUrl) => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.src = imageUrl;
+
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let r = 0, g = 0, b = 0, count = 0;
+
+      for (let i = 0; i < data.length; i += 4) {
+        r += data[i];
+        g += data[i + 1];
+        b += data[i + 2];
+        count++;
+      }
+
+      r = Math.floor(r / count);
+      g = Math.floor(g / count);
+      b = Math.floor(b / count);
+
+      resolve(getColorName(r, g, b));
+    };
+  });
+};
+
+const getColorName = (r, g, b) => {
+  if (r > 200 && g > 200 && b > 200) return "White";
+  if (r < 60 && g < 60 && b < 60) return "Black";
+  if (r > g && r > b) return "Red";
+  if (g > r && g > b) return "Green";
+  if (b > r && b > g) return "Blue";
+  return "Silver";
+};
+
 
   // 🔐 Check authentication status
   useEffect(() => {
@@ -109,14 +151,21 @@ export default function AIDashboard() {
   };
 
   // 📸 Image Handling Functions
-  const handleImageUpload = (e) => {
-    const file = e.target.files?.[0];
-    console.log("📁 Image uploaded:", file?.name, "Size:", file?.size, "bytes");
-    if (file) {
-      setImageFile(file);
-      setImage(URL.createObjectURL(file));
-    }
-  };
+  const handleImageUpload = async (e) => {
+  const file = e.target.files?.[0];
+  console.log("📁 Image uploaded:", file?.name, "Size:", file?.size, "bytes");
+
+  if (file) {
+    const imageUrl = URL.createObjectURL(file);
+    setImageFile(file);
+    setImage(imageUrl);
+
+    // ✅ AUTO DETECT COLOR
+    const autoColor = await extractAverageColor(imageUrl);
+    setCarDetails(prev => ({ ...prev, color: autoColor }));
+  }
+};
+
 
   const startCamera = async () => {
     console.log("📷 Starting camera...");
@@ -147,14 +196,20 @@ export default function AIDashboard() {
     canvas.height = video.videoHeight;
     canvas.getContext("2d").drawImage(video, 0, 0);
     
-    canvas.toBlob((blob) => {
+    canvas.toBlob(async (blob) => {
       if (!blob) return alert("Capture failed");
       const file = new File([blob], "captured.jpg", { type: "image/jpeg" });
       console.log("✅ Photo captured:", blob.size, "bytes");
+      const imageUrl = URL.createObjectURL(file);
       setImageFile(file);
-      setImage(URL.createObjectURL(file));
+      setImage(imageUrl);
+
+      // ✅ AUTO DETECT COLOR
+      const autoColor = await extractAverageColor(imageUrl);
+      setCarDetails(prev => ({ ...prev, color: autoColor }));
+
       stopCamera();
-    }, "image/jpeg", 0.8);
+    });
   };
 
   // 🚗 Vehicle Form Handling
@@ -208,7 +263,6 @@ export default function AIDashboard() {
         const parts = response.data.cost_results?.map((item, idx) => ({
           part: item.damage_type,
           severity_label: item.severity,
-          confidence: item.confidence,
           cost: item.cost,
           image: response.data.crops?.[idx] ? response.data.crops[idx] : ""
         })) || [];
@@ -604,7 +658,7 @@ export default function AIDashboard() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b-2 border-gray-600">
-                    {["Damage Part", "Severity", "Confidence", "Repair Cost (₹)", "Damage Image"].map(header => (
+                    {["Damage Part", "Severity", "Repair Cost (₹)", "Damage Image"].map(header => (
                       <th key={header} className="px-6 py-4 text-lg font-semibold">{header}</th>
                     ))}
                   </tr>
@@ -621,11 +675,6 @@ export default function AIDashboard() {
                         }`}>
                           {part.severity_label}
                         </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <span>{(part.confidence * 100).toFixed(1)}%</span>
-                        </div>
                       </td>
                       <td className="px-6 py-4 text-green-400 font-semibold">₹{part.cost?.toLocaleString()}</td>
                       <td className="px-6 py-4">
@@ -653,7 +702,7 @@ export default function AIDashboard() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-gray-900">
-                    <td colSpan="3" className="px-6 py-4 text-right font-semibold">Total Repair Cost:</td>
+                    <td colSpan="2" className="px-6 py-4 text-right font-semibold">Total Repair Cost:</td>
                     <td className="px-6 py-4 text-green-400 font-bold text-xl">₹{totalCost.toLocaleString()}</td>
                     <td className="px-6 py-4"></td>
                   </tr>
