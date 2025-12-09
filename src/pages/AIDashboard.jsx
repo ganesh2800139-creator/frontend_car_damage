@@ -2,10 +2,12 @@ import React, { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import axios from "axios";
 import { useLocation } from "react-router-dom";
-import { auth } from "../../firebase"; // Adjust path as needed
+import { auth } from "../../firebase";
 import { onAuthStateChanged } from "firebase/auth";
+import demoVideo from "../assets/aivideo/aivideo.mp4";
 
 export default function AIDashboard() {
+  console.log("🎬 Component mounted");
   const location = useLocation();
 
   // State Management
@@ -22,19 +24,11 @@ export default function AIDashboard() {
   const [damagedParts, setDamagedParts] = useState([]);
   const [connectionStatus, setConnectionStatus] = useState("checking");
   const [carDetails, setCarDetails] = useState({ type: "", color: "", year: "", fuel: "" });
-  const [user, setUser] = useState(null); // Track user authentication
-  const [showLoginAlert, setShowLoginAlert] = useState(false); // Popup state
-
-  // Check authentication status
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-    });
-    return () => unsubscribe();
-  }, []);
+  const [user, setUser] = useState(null);
+  const [showLoginAlert, setShowLoginAlert] = useState(false);
 
   // API Configuration
-  const API_BASE_URL = "https://vehicle-damage-dl-backend.onrender.com";
+  const API_BASE_URL = "http://192.168.1.7:5000";
   const ENDPOINTS = {
     VEHICLE_BRANDS: `${API_BASE_URL}/vehicle-brands`,
     PREDICT: `${API_BASE_URL}/predict`,
@@ -42,31 +36,51 @@ export default function AIDashboard() {
     STATIC: `${API_BASE_URL}/static`
   };
 
-  // Backend Connection
+  // 🔐 Check authentication status
   useEffect(() => {
+    console.log("🔐 Auth check initiated");
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      console.log("👤 Auth state changed:", currentUser ? "User logged in" : "No user");
+      setUser(currentUser);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 🔌 Backend Connection & Data Fetching
+  useEffect(() => {
+    console.log("🔄 Initializing backend connection");
     checkBackendConnection();
     fetchVehicleBrands();
   }, []);
 
   const checkBackendConnection = async () => {
+    console.log("🔗 Checking backend connection...");
     try {
       const response = await axios.get(ENDPOINTS.HEALTH, { timeout: 5000 });
+      console.log("✅ Backend connected successfully");
       setConnectionStatus("connected");
+      console.log("==================> Connected")
     } catch (error) {
+      console.error("❌ Backend connection failed====================>:", error.message);
+      console.log("==================> Not Connected")
       setConnectionStatus("failed");
     }
   };
 
   const fetchVehicleBrands = async () => {
+    console.log("🚗 Fetching vehicle brands...");
     if (connectionStatus === "failed") {
+      console.log("⚠️ Using fallback vehicle data");
       setVehicleBrands(getFallbackVehicleData());
       return;
     }
 
     try {
       const response = await axios.get(ENDPOINTS.VEHICLE_BRANDS, { timeout: 8000 });
+      console.log("✅ Vehicle brands loaded:", Object.keys(response.data).length, "brands");
       setVehicleBrands(response.data);
     } catch (error) {
+      console.error("❌ Failed to fetch vehicle brands:", error.message);
       setVehicleBrands(getFallbackVehicleData());
     }
   };
@@ -82,20 +96,22 @@ export default function AIDashboard() {
     "MarutiSuzuki": ["Swift", "Baleno", "Dzire", "WagonR"]
   });
 
-  // Handle "Try Our AI" button click
+  // 🚀 Handle "Try Our AI" button click
   const handleTryOurAI = () => {
+    console.log("🚀 Try Our AI clicked, Step:", step, "User:", user ? "Logged in" : "Not logged in");
     if (!user) {
-      // Show popup instead of redirecting
+      console.log("🔒 Showing login alert popup");
       setShowLoginAlert(true);
     } else {
-      // Proceed to step 2 if logged in
+      console.log("✅ Proceeding to step 2");
       setStep(2);
     }
   };
 
-  // Image Handling
+  // 📸 Image Handling Functions
   const handleImageUpload = (e) => {
     const file = e.target.files?.[0];
+    console.log("📁 Image uploaded:", file?.name, "Size:", file?.size, "bytes");
     if (file) {
       setImageFile(file);
       setImage(URL.createObjectURL(file));
@@ -103,21 +119,26 @@ export default function AIDashboard() {
   };
 
   const startCamera = async () => {
+    console.log("📷 Starting camera...");
     try {
       setCapturing(true);
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      console.log("✅ Camera access granted");
       if (videoRef.current) videoRef.current.srcObject = stream;
     } catch (err) {
+      console.error("❌ Camera access denied:", err.message);
       alert("Camera access denied");
     }
   };
 
   const stopCamera = () => {
+    console.log("⏹️ Stopping camera");
     setCapturing(false);
     videoRef.current?.srcObject?.getTracks().forEach(track => track.stop());
   };
 
   const capturePhoto = () => {
+    console.log("📸 Capturing photo...");
     const canvas = document.createElement("canvas");
     const video = videoRef.current;
     if (!video?.videoWidth) return alert("Camera not ready");
@@ -129,19 +150,31 @@ export default function AIDashboard() {
     canvas.toBlob((blob) => {
       if (!blob) return alert("Capture failed");
       const file = new File([blob], "captured.jpg", { type: "image/jpeg" });
+      console.log("✅ Photo captured:", blob.size, "bytes");
       setImageFile(file);
       setImage(URL.createObjectURL(file));
       stopCamera();
     }, "image/jpeg", 0.8);
   };
 
-  // Vehicle Form
+  // 🚗 Vehicle Form Handling
   const handleCarDetailChange = (field, value) => {
+    console.log("📝 Car detail changed:", field, "=", value);
     setCarDetails(prev => ({ ...prev, [field]: value }));
   };
 
-  // Prediction API
+  // 🤖 Prediction API Call
   const handlePredict = async () => {
+    console.log("🤖 Starting prediction...");
+    console.log("📊 Input details:", {
+      hasImage: !!imageFile,
+      brand: selectedBrand,
+      model: selectedModel,
+      carDetails,
+      connectionStatus
+    });
+
+    // Validation
     if (!imageFile) return alert("Please upload an image");
     if (!selectedBrand || !selectedModel) return alert("Please select brand and model");
     if (!carDetails.type || !carDetails.color || !carDetails.year || !carDetails.fuel) {
@@ -162,11 +195,14 @@ export default function AIDashboard() {
       formData.append("year", carDetails.year);
       formData.append("fuel", carDetails.fuel);
 
+      console.log("📤 Sending prediction request...");
       const response = await axios.post(ENDPOINTS.PREDICT, formData, {
         headers: { "Content-Type": "multipart/form-data" },
         timeout: 120000,
       });
 
+      console.log("✅ Prediction response:", response.data);
+      
       if (response.data.success) {
         setPrediction(response.data);
         const parts = response.data.cost_results?.map((item, idx) => ({
@@ -174,8 +210,9 @@ export default function AIDashboard() {
           severity_label: item.severity,
           confidence: item.confidence,
           cost: item.cost,
-          image: response.data.crops?.[idx] || ""
+          image: response.data.crops?.[idx] ? response.data.crops[idx] : ""
         })) || [];
+        console.log("📈 Damage parts found:", parts.length);
         setDamagedParts(parts);
         setStep(7);
       } else {
@@ -183,6 +220,7 @@ export default function AIDashboard() {
         setStep(4);
       }
     } catch (error) {
+      console.error("❌ Prediction failed:", error);
       alert("Analysis failed. Check backend connection.");
       setStep(4);
     } finally {
@@ -190,10 +228,12 @@ export default function AIDashboard() {
     }
   };
 
-  // Helper Functions
+  // 🧮 Helper Functions
   const totalCost = damagedParts.reduce((sum, p) => sum + (p.cost || 0), 0);
+  console.log("💰 Total cost calculated:", totalCost);
 
   const printResults = () => {
+    console.log("🖨️ Printing results...");
     const printContent = document.getElementById("printable-results")?.innerHTML;
     if (!printContent) return alert("No content to print");
     
@@ -204,9 +244,9 @@ export default function AIDashboard() {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Damage Analysis Report</title>
+          <title>Vehicle Damage Analysis Report</title>
           <style>
-            body { font-family: Arial; margin: 40px; color: #333; }
+            body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
             .print-header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
             .summary-cards { display: flex; justify-content: space-around; margin: 30px 0; text-align: center; }
             .summary-card { padding: 20px; border: 1px solid #ddd; border-radius: 10px; min-width: 150px; }
@@ -214,24 +254,52 @@ export default function AIDashboard() {
             .damage-table th, .damage-table td { border: 1px solid #ddd; padding: 12px; text-align: left; }
             .damage-table th { background-color: #f8f9fa; }
             .total-cost { text-align: right; font-size: 1.5em; font-weight: bold; margin-top: 30px; color: #059669; }
-            @media print { body { margin: 0; } .no-print { display: none; } }
+            .severity-high { background-color: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 12px; }
+            .severity-medium { background-color: #fef3c7; color: #d97706; padding: 4px 8px; border-radius: 12px; }
+            .severity-low { background-color: #dcfce7; color: #16a34a; padding: 4px 8px; border-radius: 12px; }
+            .damage-image { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; }
+            .print-total-section { background-color: #f8f9fa; padding: 20px; border-radius: 10px; margin-top: 30px; }
+            @media print { 
+              body { margin: 0; } 
+              .no-print { display: none; } 
+              .page-break { page-break-before: always; }
+            }
           </style>
         </head>
         <body>
           <div class="print-header">
             <h1>Vehicle Damage Analysis Report</h1>
-            <p>Generated on ${new Date().toLocaleDateString()}</p>
+            <p>Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
+            <p><strong>Vehicle:</strong> ${selectedBrand} ${selectedModel} | ${carDetails.type} | ${carDetails.color} | ${carDetails.year} | ${carDetails.fuel}</p>
           </div>
           ${printContent}
+          
+          <div class="print-total-section">
+            <div class="total-cost">
+              <h3>Summary</h3>
+              <p>Total Damage Areas: ${damagedParts.length}</p>
+              <p>Critical Damages: ${damagedParts.filter(p => p.severity_label?.toLowerCase() === 'high').length}</p>
+              <p><strong>TOTAL REPAIR COST: ₹${totalCost.toLocaleString()}</strong></p>
+            </div>
+          </div>
+          
+          <div style="margin-top: 40px; text-align: center; color: #666; font-size: 0.9em;">
+            <p>--- End of Report ---</p>
+            <p>This report was generated by AI-Powered Vehicle Damage Detection System</p>
+          </div>
         </body>
       </html>
     `);
     
     printWindow.document.close();
-    setTimeout(() => printWindow.print(), 500);
+    setTimeout(() => {
+      console.log("✅ Printing dialog opened");
+      printWindow.print();
+    }, 500);
   };
 
   const resetFlow = () => {
+    console.log("🔄 Resetting flow to step 1");
     setStep(1);
     setSelectedBrand("");
     setSelectedModel("");
@@ -242,7 +310,7 @@ export default function AIDashboard() {
     setCarDetails({ type: "", color: "", year: "", fuel: "" });
   };
 
-  // Brand Logos
+  // Brand Logos mapping
   const brandLogos = {
     "Toyota": "https://logos-world.net/wp-content/uploads/2020/04/Toyota-Symbol.png",
     "Hyundai": "https://www.pngall.com/wp-content/uploads/13/Hyundai-Logo-PNG-File.png",
@@ -254,7 +322,7 @@ export default function AIDashboard() {
     "MarutiSuzuki": "https://www.freepnglogos.com/uploads/suzuki-png-logo/latest-models-world-suzuki-png-logo-0.png",
   };
 
-  // Login Alert Popup Component
+  // 🔒 Login Alert Popup Component
   const LoginAlert = () => (
     <motion.div 
       initial={{ opacity: 0, scale: 0.8 }}
@@ -294,7 +362,7 @@ export default function AIDashboard() {
     </motion.div>
   );
 
-  // Step Components
+  // 🎯 Step Components
   const Step1Hero = () => (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-7xl mx-auto">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center mb-16">
@@ -305,20 +373,31 @@ export default function AIDashboard() {
           </motion.h1>
           <motion.p initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }}
             className="text-xl text-gray-300 mb-8">
-            Upload a photo of your damaged vehicle and get instant AI-powered damage analysis with accurate repair cost estimates.
+            Car damage refers to physical harm such as dents, scratches, cracks, or broken parts that occur when a vehicle comes into contact with an object or surface. Estimated cost is the approximate amount of money needed to repair this damage. The cost varies depending on the type and depth of the damage, the car’s brand and model, paint requirements, and whether any parts need to be replaced. In general, minor scratches cost less to repair, while deeper dents or broken components require higher expenses.
           </motion.p>
           <motion.button initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.6 }}
             onClick={handleTryOurAI} className="bg-gradient-to-r from-purple-600 to-blue-600 px-12 py-6 rounded-2xl text-xl font-bold hover:from-purple-700 hover:to-blue-700 transition-all transform hover:scale-105 shadow-2xl">
             🚀 TRY OUR AI - GET STARTED
           </motion.button>
-        </motion.div>
-        <motion.div initial={{ x: 50, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.3 }}
-          className="bg-gray-800 rounded-2xl p-4 shadow-2xl">
-          <div className="aspect-video bg-black rounded-xl overflow-hidden">
-            <img src="https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExZms2OGx1bzNsdzM3MmV3NnluaXMxemxicHlhZ2VodmxsdWtvdjRzOCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/MgQDiH1UjsW25PFiyb/giphy.gif" 
-              alt="Car Damage Analysis" className="w-full h-full object-cover" />
-          </div>
-        </motion.div>
+</motion.div>
+<motion.div
+  initial={{ x: 50, opacity: 0 }}
+  animate={{ x: 0, opacity: 1 }}
+  transition={{ delay: 0.3 }}
+  className="bg-gray-800 rounded-2xl shadow-2xl mt-4"
+>
+  <div className="aspect-video bg-black rounded-2xl overflow-hidden border border-gray-700 m-4">
+    <video
+      src={demoVideo}
+      controls
+      autoPlay
+      muted={false}
+      loop
+      className="w-full h-full object-cover rounded-2xl"
+    />
+  </div>
+</motion.div>
+
       </div>
 
       <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.8 }}
@@ -329,7 +408,7 @@ export default function AIDashboard() {
           { icon: "💰", title: "Cost Estimation", desc: "Detailed repair costs in Indian Rupees", color: "green" }
         ].map((feature, idx) => (
           <motion.div key={idx} whileHover={{ scale: 1.05 }} 
-            className={`bg-gray-800 rounded-2xl p-6 border-l-4 border-${feature.color}-500`}>
+            className={`bg-gray-800 rounded-2xl p-6 border-l-4 ${feature.color === 'purple' ? 'border-purple-500' : feature.color === 'blue' ? 'border-blue-500' : 'border-green-500'}`}>
             <div className="text-3xl mb-4">{feature.icon}</div>
             <h3 className="text-2xl font-bold mb-3">{feature.title}</h3>
             <p className="text-gray-300">{feature.desc}</p>
@@ -339,14 +418,13 @@ export default function AIDashboard() {
     </motion.div>
   );
 
-  // ... (All other Step components remain exactly the same as before)
   const Step2Brands = () => (
     <motion.div initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} className="max-w-6xl mx-auto">
       <h2 className="text-4xl font-bold mb-8 text-center">Select Vehicle Brand</h2>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
         {Object.keys(vehicleBrands).map(brand => (
           <motion.button key={brand} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-            onClick={() => { setSelectedBrand(brand); setSelectedModel(""); }}
+            onClick={() => { setSelectedBrand(brand); setSelectedModel(""); console.log("🏷️ Brand selected:", brand); }}
             className={`p-6 rounded-2xl border-2 transition-all ${selectedBrand === brand ? "border-purple-500 bg-purple-500/20" : "border-gray-600 bg-gray-800"}`}>
             <img src={brandLogos[brand]} alt={brand} className="w-16 h-16 mx-auto mb-3 object-contain" />
             <span className="font-semibold">{brand}</span>
@@ -355,7 +433,7 @@ export default function AIDashboard() {
       </div>
       <div className="flex justify-between mt-12">
         <button onClick={() => setStep(1)} className="px-6 py-3 border border-gray-600 rounded-xl hover:bg-gray-800">← Back</button>
-        <button disabled={!selectedBrand} onClick={() => setStep(3)} 
+        <button disabled={!selectedBrand} onClick={() => { console.log("➡️ Moving to step 3"); setStep(3); }} 
           className="px-6 py-3 bg-purple-600 rounded-xl hover:bg-purple-700 disabled:opacity-50">Next →</button>
       </div>
     </motion.div>
@@ -366,7 +444,7 @@ export default function AIDashboard() {
       <h2 className="text-4xl font-bold mb-2 text-center">Select {selectedBrand} Model</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
         {vehicleBrands[selectedBrand]?.map(model => (
-          <motion.button key={model} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => setSelectedModel(model)}
+          <motion.button key={model} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => { setSelectedModel(model); console.log("🚘 Model selected:", model); }}
             className={`p-4 rounded-xl border-2 text-left ${selectedModel === model ? "border-purple-500 bg-purple-500/20" : "border-gray-600 bg-gray-800"}`}>
             <div className="flex justify-between items-center">
               <span className="font-semibold">{model}</span>
@@ -377,7 +455,7 @@ export default function AIDashboard() {
       </div>
       <div className="flex justify-between">
         <button onClick={() => setStep(2)} className="px-6 py-3 border border-gray-600 rounded-xl hover:bg-gray-800">← Back</button>
-        <button disabled={!selectedModel} onClick={() => setStep(4)} 
+        <button disabled={!selectedModel} onClick={() => { console.log("➡️ Moving to step 4"); setStep(4); }} 
           className="px-6 py-3 bg-purple-600 rounded-xl hover:bg-purple-700 disabled:opacity-50">Next →</button>
       </div>
     </motion.div>
@@ -424,7 +502,7 @@ export default function AIDashboard() {
           {image ? (
             <div className="space-y-4">
               <img src={image} alt="Preview" className="w-full h-80 object-contain rounded-xl bg-black" />
-              <button onClick={() => { setImage(null); setImageFile(null); }} className="w-full py-3 border border-gray-600 rounded-xl">Remove Image</button>
+              <button onClick={() => { setImage(null); setImageFile(null); console.log("🗑️ Image removed"); }} className="w-full py-3 border border-gray-600 rounded-xl">Remove Image</button>
             </div>
           ) : (
             <div className="h-80 flex flex-col items-center justify-center border-2 border-dashed border-gray-600 rounded-xl text-gray-400">
@@ -436,7 +514,7 @@ export default function AIDashboard() {
       </div>
       <div className="flex justify-between mt-8">
         <button onClick={() => setStep(3)} className="px-6 py-3 border border-gray-600 rounded-xl">← Back</button>
-        <button disabled={!imageFile} onClick={() => setStep(5)} 
+        <button disabled={!imageFile} onClick={() => { console.log("➡️ Moving to step 5"); setStep(5); }} 
           className="px-6 py-3 bg-purple-600 rounded-xl disabled:opacity-50">Next →</button>
       </div>
     </motion.div>
@@ -497,17 +575,25 @@ export default function AIDashboard() {
           { value: `₹${totalCost.toLocaleString()}`, label: "Total Cost", color: "green" }
         ].map((item, idx) => (
           <div key={idx} className="bg-gray-800 rounded-2xl p-6 text-center">
-            <div className={`text-3xl font-bold text-${item.color}-400 mb-2`}>{item.value}</div>
+            <div className={`text-3xl font-bold ${item.color === 'purple' ? 'text-purple-400' : item.color === 'yellow' ? 'text-yellow-400' : 'text-green-400'} mb-2`}>
+              {item.value}
+            </div>
             <div className="text-gray-400">{item.label}</div>
           </div>
         ))}
       </div>
 
+      {/* Printable Results Section */}
       <div id="printable-results" className="no-print">
         {prediction?.annotated_image && (
           <div className="mb-8 bg-gray-800 rounded-2xl p-6">
             <h3 className="text-2xl font-bold mb-4">AI Damage Detection</h3>
-            <img src={`${API_BASE_URL}/${prediction.annotated_image}`} alt="AI Analysis" className="max-w-full max-h-96 rounded-xl mx-auto" />
+            <img 
+              src={`${API_BASE_URL}/${prediction.annotated_image}`} 
+              alt="AI Analysis" 
+              className="max-w-full max-h-96 rounded-xl mx-auto object-contain" 
+              onError={(e) => console.error("❌ Failed to load annotated image")}
+            />
           </div>
         )}
 
@@ -525,23 +611,53 @@ export default function AIDashboard() {
                 </thead>
                 <tbody>
                   {damagedParts.map((part, idx) => (
-                    <tr key={idx} className="border-b border-gray-700">
+                    <tr key={idx} className="border-b border-gray-700 hover:bg-gray-700/50 transition-colors">
                       <td className="px-6 py-4 font-medium capitalize">{part.part?.replace(/_/g, ' ')}</td>
                       <td className="px-6 py-4">
                         <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                           part.severity_label?.toLowerCase() === 'high' ? 'bg-red-500/20 text-red-400' : 
                           part.severity_label?.toLowerCase() === 'medium' ? 'bg-yellow-500/20 text-yellow-400' : 
                           'bg-green-500/20 text-green-400'
-                        }`}>{part.severity_label}</span>
+                        }`}>
+                          {part.severity_label}
+                        </span>
                       </td>
-                      <td className="px-6 py-4">{(part.confidence * 100).toFixed(1)}%</td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <span>{(part.confidence * 100).toFixed(1)}%</span>
+                        </div>
+                      </td>
                       <td className="px-6 py-4 text-green-400 font-semibold">₹{part.cost?.toLocaleString()}</td>
                       <td className="px-6 py-4">
-                        {part.image && <img src={`${API_BASE_URL}/${part.image}`} alt="Damage" className="w-20 h-20 object-cover rounded-lg" />}
+                        {part.image ? (
+                          <div className="flex flex-col items-center gap-2">
+                            <img 
+                              src={part.image.startsWith('http') ? part.image : `${API_BASE_URL}/${part.image}`} 
+                              alt={`Damage - ${part.part}`} 
+                              className="w-20 h-20 object-cover rounded-lg border border-gray-600"
+                              onError={(e) => {
+                                console.error(`❌ Failed to load damage image: ${part.image}`);
+                                e.target.onerror = null;
+                                e.target.src = "https://via.placeholder.com/80?text=No+Image";
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-20 h-20 bg-gray-700 rounded-lg flex items-center justify-center">
+                            <span className="text-gray-400 text-xs">No Image</span>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr className="bg-gray-900">
+                    <td colSpan="3" className="px-6 py-4 text-right font-semibold">Total Repair Cost:</td>
+                    <td className="px-6 py-4 text-green-400 font-bold text-xl">₹{totalCost.toLocaleString()}</td>
+                    <td className="px-6 py-4"></td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           ) : (
@@ -554,17 +670,26 @@ export default function AIDashboard() {
         </div>
       </div>
 
+      {/* REMOVED: Damage Images Gallery Section */}
+
       <div className="flex flex-col sm:flex-row justify-between gap-4 no-print">
-        <button onClick={resetFlow} className="px-8 py-4 border border-gray-600 rounded-xl">🏠 New Assessment</button>
+        <button onClick={resetFlow} className="px-8 py-4 border border-gray-600 rounded-xl hover:bg-gray-800 transition-colors">
+          🏠 New Assessment
+        </button>
         <div className="flex gap-4">
-          <button onClick={() => setStep(4)} className="px-6 py-4 border border-gray-600 rounded-xl">📸 Re-analyze</button>
-          <button onClick={printResults} className="px-6 py-4 bg-green-600 rounded-xl">🖨️ Print Report</button>
+          <button onClick={() => { console.log("📸 Re-analyze clicked"); setStep(4); }} className="px-6 py-4 border border-gray-600 rounded-xl hover:bg-gray-800 transition-colors">
+            📸 Re-analyze
+          </button>
+          <button onClick={printResults} className="px-6 py-4 bg-green-600 rounded-xl hover:bg-green-700 transition-colors">
+            🖨️ Print Report
+          </button>
         </div>
       </div>
     </motion.div>
   );
 
-  // Main Render
+  // 🎨 Main Render
+  console.log("🎨 Rendering step:", step);
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-black text-white px-4 py-8">
       {step === 1 && <Step1Hero />}
